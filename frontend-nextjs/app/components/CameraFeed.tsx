@@ -11,6 +11,7 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ onCapture }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const getCamera = async () => {
@@ -45,8 +46,28 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ onCapture }) => {
       const ctx = canvas.getContext("2d");
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob((blob) => {
-          if (onCapture && blob) onCapture(blob);
+        canvas.toBlob(async (blob) => {
+          if (blob) {
+            // Preview the photo
+            const url = URL.createObjectURL(blob);
+            setPreviewUrl(url);
+            if (onCapture) onCapture(blob);
+            // Save to localStorage as base64
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              if (reader.result && typeof reader.result === "string") {
+                localStorage.setItem("capturedPhoto", reader.result);
+              }
+            };
+            reader.readAsDataURL(blob);
+            // Send to backend
+            const formData = new FormData();
+            formData.append("photo", blob);
+            await fetch("/api/register", {
+              method: "POST",
+              body: formData,
+            });
+          }
         }, "image/jpeg");
       }
     }
@@ -65,6 +86,24 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ onCapture }) => {
       <button onClick={handleCapture} disabled={!streaming}>
         Capture Snapshot
       </button>
+      {previewUrl && (
+        <div style={{ marginTop: 16 }}>
+          <h3>Photo Preview:</h3>
+          <img
+            src={previewUrl}
+            alt="Snapshot preview"
+            style={{ maxWidth: 400, border: "1px solid #ccc" }}
+          />
+          <br />
+          <a
+            href={previewUrl}
+            download={"snapshot.jpg"}
+            style={{ display: "inline-block", marginTop: 8 }}
+          >
+            <button type="button">Download Photo</button>
+          </a>
+        </div>
+      )}
     </div>
   );
 };
